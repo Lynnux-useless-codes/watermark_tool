@@ -1,0 +1,11 @@
+{
+    "watermark_text": "Sample Watermark",
+    "position": "bottom-right",
+    "font_path": "fonts/Concert_One/ConcertOne-Regular.ttf",
+    "font_size_ratio": 0.01,
+    "input_folder": "images",
+    "output_folder": "watermarked_images",
+    "transparency": 85,
+    "text_color": [255, 255, 255],
+    "bg_color": [0, 0, 0]
+}
