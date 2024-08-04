@@ -87,4 +87,4 @@ Contributions are welcome! Please open issues or submit pull requests for bugs o
 
 ## Contact
 
-For any questions or feedback, please contact your email.
+For any questions or feedback, please contact me at discord @darl_lynn.
