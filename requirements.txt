@@ -1,2 +1,15 @@
+certifi==2024.7.4
+charset-normalizer==3.3.2
+decorator==4.4.2
+idna==3.7
+imageio==2.34.2
+imageio-ffmpeg==0.5.1
 logging==0.4.9.6
+moviepy==1.0.3
+numpy==2.0.1
 pillow==10.4.0
+proglog==0.1.10
+requests==2.32.3
+setuptools==71.1.0
+tqdm==4.66.4
+urllib3==2.2.2

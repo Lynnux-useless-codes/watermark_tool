@@ -1,3 +1,5 @@
+import numpy as np
+from moviepy.editor import VideoFileClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import os
 import json
@@ -7,31 +9,12 @@ import logging
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def add_watermark(input_image_path, output_image_path, watermark_text, position, font_path=None, font_size_ratio=0.05, transparency=128, text_color=(255, 255, 255), bg_color=(0, 0, 0)):
-    try:
-        original = Image.open(input_image_path).convert("RGBA")
-    except Exception as e:
-        logging.error(f"Failed to open {input_image_path}: {e}")
-        return
+def add_watermark_to_image(image, watermark_text, position, font, font_size, transparency, text_color, bg_color):
+    """Add watermark to a single image frame."""
+    original = image.convert("RGBA")
 
     # Make the image editable
     txt = Image.new('RGBA', original.size, (255, 255, 255, 0))
-
-    # Calculate dynamic font size based on image dimensions
-    width, height = original.size
-    min_dimension = min(width, height)
-    font_size = max(10, int(min_dimension * font_size_ratio))  # Ensure font size is at least 10
-
-    # Load a font
-    font = None
-    if font_path:
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except Exception as e:
-            logging.error(f"Failed to load font {font_path}: {e}")
-            font = ImageFont.load_default()
-    else:
-        font = ImageFont.load_default()
 
     # Initialize ImageDraw
     draw = ImageDraw.Draw(txt)
@@ -42,11 +25,11 @@ def add_watermark(input_image_path, output_image_path, watermark_text, position,
     if position == "top-left":
         pos = (10, 10)
     elif position == "top-right":
-        pos = (width - text_width - 10, 10)
+        pos = (original.width - text_width - 10, 10)
     elif position == "bottom-left":
-        pos = (10, height - text_height - 10)
+        pos = (10, original.height - text_height - 10)
     elif position == "bottom-right":
-        pos = (width - text_width - 10, height - text_height - 10)
+        pos = (original.width - text_width - 10, original.height - text_height - 10)
     else:
         pos = position  # Use as coordinates if not a predefined position
 
@@ -57,15 +40,73 @@ def add_watermark(input_image_path, output_image_path, watermark_text, position,
     draw.text(pos, watermark_text, fill=(text_color[0], text_color[1], text_color[2], 255), font=font)
 
     # Combine original image with watermark
-    watermarked = Image.alpha_composite(original, txt)
+    watermarked = Image.alpha_composite(original, txt).convert("RGB")
+    return watermarked
 
-    # Save the result
-    watermarked = watermarked.convert("RGB")  # Remove alpha for saving in JPEG format
+def process_image(input_image_path, output_image_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color):
+    """Process image files and add watermark."""
     try:
-        watermarked.save(output_image_path)
-        logging.info(f"Watermark added to {input_image_path}, saved as {output_image_path}")
+        original = Image.open(input_image_path)
     except Exception as e:
-        logging.error(f"Failed to save {output_image_path}: {e}")
+        logging.error(f"Failed to open {input_image_path}: {e}")
+        return
+
+    width, height = original.size
+    min_dimension = min(width, height)
+    font_size = max(10, int(min_dimension * font_size_ratio))
+    font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
+
+    watermarked = add_watermark_to_image(original, watermark_text, position, font, font_size, transparency, text_color, bg_color)
+    watermarked.save(output_image_path)
+    logging.info(f"Watermark added to {input_image_path}, saved as {output_image_path}")
+
+def process_video(input_video_path, output_video_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color):
+    """Process video files and add watermark to each frame."""
+    try:
+        video = VideoFileClip(input_video_path)
+    except Exception as e:
+        logging.error(f"Failed to open video {input_video_path}: {e}")
+        return
+
+    width, height = video.size
+    min_dimension = min(width, height)
+    font_size = max(10, int(min_dimension * font_size_ratio))
+    font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
+
+    def add_watermark_to_frame(get_frame, t):
+        frame = Image.fromarray(get_frame(t))
+        watermarked_frame = add_watermark_to_image(frame, watermark_text, position, font, font_size, transparency, text_color, bg_color)
+        return np.array(watermarked_frame)
+
+    watermarked_video = video.fl(add_watermark_to_frame)
+    watermarked_video.write_videofile(output_video_path, codec='libx264', audio_codec='aac')
+    logging.info(f"Watermark added to video {input_video_path}, saved as {output_video_path}")
+
+def process_gif(input_gif_path, output_gif_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color):
+    """Process GIF files and add watermark to each frame."""
+    try:
+        gif = Image.open(input_gif_path)
+    except Exception as e:
+        logging.error(f"Failed to open GIF {input_gif_path}: {e}")
+        return
+
+    frames = []
+    try:
+        while True:
+            frame = gif.copy().convert("RGBA")
+            width, height = frame.size
+            min_dimension = min(width, height)
+            font_size = max(10, int(min_dimension * font_size_ratio))
+            font = ImageFont.truetype(font_path, font_size) if font_path else ImageFont.load_default()
+
+            watermarked_frame = add_watermark_to_image(frame, watermark_text, position, font, font_size, transparency, text_color, bg_color)
+            frames.append(watermarked_frame)
+            gif.seek(gif.tell() + 1)
+    except EOFError:
+        pass
+
+    frames[0].save(output_gif_path, save_all=True, append_images=frames[1:], loop=0, duration=gif.info['duration'])
+    logging.info(f"Watermark added to GIF {input_gif_path}, saved as {output_gif_path}")
 
 def load_config(config_path):
     try:
@@ -77,7 +118,7 @@ def load_config(config_path):
         return {}
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Add watermark to images.")
+    parser = argparse.ArgumentParser(description="Add watermark to images and videos.")
     parser.add_argument('--config', type=str, default='config.json', help='Path to the configuration file.')
     return parser.parse_args()
 
@@ -89,19 +130,26 @@ def main():
     position = config.get("position", "bottom-right")
     font_path = config.get("font_path", None)
     font_size_ratio = config.get("font_size_ratio", 0.05)
-    input_folder = config.get("input_folder", "images")
-    output_folder = config.get("output_folder", "watermarked_images")
+    input_folder = config.get("input_folder", "media")
+    output_folder = config.get("output_folder", "watermarked_media")
     transparency = config.get("transparency", 128)
     text_color = tuple(config.get("text_color", [255, 255, 255]))
     bg_color = tuple(config.get("bg_color", [0, 0, 0]))
 
     os.makedirs(output_folder, exist_ok=True)
 
-    for image_file in os.listdir(input_folder):
-        if image_file.lower().endswith(('png', 'jpg', 'jpeg')):
-            input_image_path = os.path.join(input_folder, image_file)
-            output_image_path = os.path.join(output_folder, f"watermarked_{image_file}")
-            add_watermark(input_image_path, output_image_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color)
+    for media_file in os.listdir(input_folder):
+        input_media_path = os.path.join(input_folder, media_file)
+        output_media_path = os.path.join(output_folder, f"watermarked_{media_file}")
+
+        if media_file.lower().endswith(('png', 'jpg', 'jpeg')):
+            process_image(input_media_path, output_media_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color)
+        elif media_file.lower().endswith(('mp4', 'avi', 'mov', 'mkv')):
+            process_video(input_media_path, output_media_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color)
+        elif media_file.lower().endswith(('gif',)):
+            process_gif(input_media_path, output_media_path, watermark_text, position, font_path, font_size_ratio, transparency, text_color, bg_color)
+        else:
+            logging.warning(f"Unsupported file format: {media_file}")
 
 if __name__ == "__main__":
     main()
